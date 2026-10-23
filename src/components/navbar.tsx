@@ -7,8 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Menu, Search, X } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { useUser } from "@/hooks/use-user";
-import { logOut } from "@/lib/auth";
+import { logOutRequest, useUser } from "@/hooks/use-user";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -31,7 +30,12 @@ function initials(name: string) {
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const user = useUser();
+  const { user, refresh } = useUser();
+
+  const handleLogout = async () => {
+    await logOutRequest();
+    await refresh();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +94,7 @@ export function Navbar() {
                 </span>
               </span>
               <Button
-                onClick={logOut}
+                onClick={handleLogout}
                 className="h-10 rounded-full border border-forest/25 bg-transparent px-5 text-sm font-medium text-forest hover:border-forest/40 hover:bg-white"
               >
                 Log Out
@@ -195,8 +199,7 @@ export function Navbar() {
                     </div>
                     <Button
                       onClick={() => {
-                        logOut();
-                        setOpen(false);
+                        void handleLogout().then(() => setOpen(false));
                       }}
                       className="h-11 w-full rounded-full border border-forest/25 bg-transparent text-sm font-medium text-forest hover:border-forest/40 hover:bg-white"
                     >

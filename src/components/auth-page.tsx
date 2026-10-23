@@ -17,8 +17,11 @@ import {
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { useUser } from "@/hooks/use-user";
-import { logIn, signUp } from "@/lib/auth";
+import {
+  logInRequest,
+  signUpRequest,
+  useUser,
+} from "@/hooks/use-user";
 import { cn } from "@/lib/utils";
 
 type Mode = "login" | "signup";
@@ -35,6 +38,7 @@ export function AuthPage({ initialMode = "login" }: { initialMode?: Mode }) {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
+  const [welcomeBack, setWelcomeBack] = useState("");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -42,11 +46,11 @@ export function AuthPage({ initialMode = "login" }: { initialMode?: Mode }) {
     confirmPassword: "",
   });
   const router = useRouter();
-  const user = useUser();
+  const { user, loading, refresh } = useUser();
 
   useEffect(() => {
-    if (user) router.replace("/");
-  }, [user, router]);
+    if (!loading && user) router.replace("/");
+  }, [user, loading, router]);
 
   const update = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -57,13 +61,15 @@ export function AuthPage({ initialMode = "login" }: { initialMode?: Mode }) {
     setMode(next);
     setErrors({});
     setFormError("");
+    setWelcomeBack("");
     setShowPassword(false);
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const nextErrors: Record<string, string> = {};
     setFormError("");
+    setWelcomeBack("");
 
     if (mode === "signup" && !form.name.trim())
       nextErrors.name = "Full name is required.";
@@ -86,25 +92,40 @@ export function AuthPage({ initialMode = "login" }: { initialMode?: Mode }) {
 
     setSubmitting(true);
 
-    setTimeout(() => {
+    try {
       const result =
         mode === "signup"
-          ? signUp({
+          ? await signUpRequest({
               name: form.name,
               email: form.email,
               password: form.password,
             })
-          : logIn({ email: form.email, password: form.password });
-
-      setSubmitting(false);
+          : await logInRequest({
+              email: form.email,
+              password: form.password,
+            });
 
       if (!result.ok) {
         setFormError(result.error);
         return;
       }
 
+      await refresh();
+
+      if (result.returning) {
+        setWelcomeBack(
+          `Welcome back, ${result.user.name.split(" ")[0]}! Taking you in…`
+        );
+        setTimeout(() => router.push("/"), 1200);
+        return;
+      }
+
       router.push("/");
-    }, 600);
+    } catch {
+      setFormError("Something went wrong. Try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -238,6 +259,16 @@ export function AuthPage({ initialMode = "login" }: { initialMode?: Mode }) {
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="mt-7 space-y-5">
+            {welcomeBack && (
+              <motion.p
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm font-medium text-forest"
+              >
+                <Check className="size-4 shrink-0 text-brand" />
+                {welcomeBack}
+              </motion.p>
+            )}
             {formError && (
               <motion.p
                 initial={{ opacity: 0, y: -6 }}

@@ -1,29 +1,85 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { AUTH_EVENT, getCurrentUser, type SessionUser } from "@/lib/auth";
+import { useCallback, useEffect, useState } from "react";
 
-const subscribe = (callback: () => void) => {
-  window.addEventListener(AUTH_EVENT, callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    window.removeEventListener(AUTH_EVENT, callback);
-    window.removeEventListener("storage", callback);
-  };
+export type SessionUser = {
+  name: string;
+  email: string;
 };
 
-const getSnapshot = () => {
-  const user = getCurrentUser();
-  return user ? JSON.stringify(user) : "";
-};
+type AuthActionResponse =
+  | { ok: true; returning?: boolean; user: SessionUser }
+  | { ok: false; error: string };
 
-const getServerSnapshot = () => "";
+async function parseJson<T>(res: Response): Promise<T> {
+  return (await res.json()) as T;
+}
 
-export function useUser(): SessionUser | null {
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot
-  );
-  return snapshot ? (JSON.parse(snapshot) as SessionUser) : null;
+export async function signUpRequest(input: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<AuthActionResponse> {
+  const res = await fetch("/api/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseJson<AuthActionResponse>(res);
+}
+
+export async function logInRequest(input: {
+  email: string;
+  password: string;
+}): Promise<AuthActionResponse> {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseJson<AuthActionResponse>(res);
+}
+
+export async function logOutRequest() {
+  await fetch("/api/auth/logout", { method: "POST" });
+}
+
+export function useUser() {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then((res) => parseJson<{ user: SessionUser | null }>(res))
+      .then((data) => {
+        if (!active) return;
+        setUser(data.user);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setUser(null);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const data = await parseJson<{ user: SessionUser | null }>(res);
+      setUser(data.user);
+      return data.user;
+    } catch {
+      setUser(null);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { user, loading, refresh, setUser };
 }
